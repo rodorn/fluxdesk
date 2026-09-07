@@ -1,10 +1,12 @@
+# Szablon usługi. Skrypt scripts/install.sh generuje wersję z prawdziwymi
+# ścieżkami; tutaj %h oznacza katalog domowy użytkownika.
 [Unit]
 Description=Fluxdesk, pulpit sterowania sesjami Claude Code
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/home/rodorn/claude-session-manager
+WorkingDirectory=%h/fluxdesk
 # Tryb deweloperski: panel nie zależy od katalogu .next, więc równoległe
 # budowanie przez inną sesję nie wywraca go w trakcie pracy.
 ExecStart=/usr/bin/npm run dev
@@ -15,7 +17,7 @@ Restart=on-failure
 RestartSec=3
 # Pod systemd brakuje ~/.local/bin, a tam mieszka claude.
 Environment=NEXT_DIST_DIR=.next-service
-Environment=PATH=/home/rodorn/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin
+Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin
 
 [Install]
 WantedBy=default.target

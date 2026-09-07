@@ -97,3 +97,58 @@ stronę zgody, a po powrocie napis zmieni się na „połączone, zapis działa�
 - Bloki czasu zakładane przeciągnięciem zadania na godzinę
 - Długość bloku brana z szacunku zadania (zapis `~30m` w treści)
 - Własny kalendarz ICS do zasubskrybowania
+
+
+## Wiele kont naraz
+
+Konto rozpoznajemy po identyfikatorze `dostawca` albo `dostawca:nazwa`, na
+przykład `google` i `google:firmowe`. Przy dodawaniu wpisz nazwę konta, jeśli
+podłączasz drugie u tego samego dostawcy; puste pole znaczy konto domyślne.
+Każde konto ma własne dane aplikacji i własne tokeny w sejfie, a blok założony
+w panelu trafia do wszystkich połączonych kont.
+
+## Planowanie zdaniem
+
+Pole na górze kalendarza przyjmuje zapis, jakiego używa się w notatniku:
+
+    dentysta środa 16
+    spotkanie pon 14-15:30
+    siłownia jutro rano
+    przegląd auta w przyszły poniedziałek przed południem
+
+Parser rozumie dni tygodnia, `dziś`, `jutro`, `pojutrze`, daty `12.09`
+i `12 września`, godziny, zakresy oraz długości (`2h`, `45 min`, `1,5h`).
+Gdy długości nie ma w tekście, pyta o nią model przez wywołanie narzędzia
+i zapamiętuje odpowiedź, więc drugi „dentysta" nie kosztuje już nic.
+Propozycja jest w pełni edytowalna: nazwa, początek i minuty.
+
+## Kolizje i wolne okna
+
+Przed zapisaniem panel czyta bloki, subskrypcje ICS i wszystkie połączone
+konta. Nakładający się termin pokazuje wprost, z którego kalendarza pochodzi,
+i wysyła powiadomienie na telefon. Przycisk **Znajdź wolny termin** zwraca
+pierwsze okna wolne we wszystkich kalendarzach naraz, w godzinach 8-20,
+z pominięciem weekendów i w kwadransowej siatce.
+
+## Zasłona zajętości
+
+Wydarzenie z jednego kalendarza może pojawić się w drugim jako sam blok czasu
+o nazwie `Zajęte`, bez opisu i bez linku. Dzięki temu w firmowym kalendarzu
+widać, że termin jest zajęty, ale nie widać czym. Panel odświeża zasłonę co
+kwadrans, przesuwa odbicia razem z oryginałem, kasuje je po odwołaniu terminu
+i ukrywa je w Twoim własnym widoku, żeby nie oglądać tego samego dwa razy.
+Ręcznie uruchamia to przycisk **Zasłoń zajętość**.
+
+## Spotkania online
+
+Wydarzenia ze spotkaniem online mają w szczegółach przycisk **Dołącz do
+spotkania**. Adres bierzemy z pól dostawcy (`onlineMeeting` w Graphie,
+`hangoutLink` i `conferenceData` w Google), a dla subskrypcji ICS z opisu,
+lokalizacji, `URL` i `X-GOOGLE-CONFERENCE`. Rozpoznawane są Teams, Meet, Zoom,
+Whereby, Jitsi, Webex, Discord i huddle na Slacku.
+
+## Gdy konsola Google jest zablokowana
+
+Od 13 maja 2025 Google Cloud wymaga weryfikacji dwuetapowej na koncie. Bez niej
+konsola odrzuca każdą podstronę i nie da się utworzyć klienta OAuth. Do czasu
+włączenia 2FA zostaje etap pierwszy, czyli odczyt przez prywatny adres ICS.

@@ -14,6 +14,28 @@ import { dataDir } from "./store";
  * więc jest osobnym krokiem; ten moduł działa bez niego.
  */
 
+/**
+ * Wyławia adres spotkania online z tekstu wydarzenia. Organizatorzy wklejają
+ * go w różne pola, więc przeszukujemy wszystkie i bierzemy pierwszy znany
+ * serwis, a dopiero potem dowolny adres.
+ */
+export function findMeetingUrl(...parts: (string | undefined)[]): string | undefined {
+  const text = parts
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\\n/g, " ")
+    .replace(/\\,/g, ",")
+    .replace(/&amp;/g, "&");
+
+  const links = text.match(/https?:\/\/[^\s"'<>]+/g) ?? [];
+  const known =
+    /(teams\.microsoft\.com|teams\.live\.com|meet\.google\.com|zoom\.us|whereby\.com|meet\.jit\.si|webex\.com|discord\.gg|slack\.com\/huddle)/i;
+
+  const hit = links.find((l) => known.test(l)) ?? links[0];
+  // Znak kończący zdanie potrafi przykleić się do adresu.
+  return hit?.replace(/[.,;)\]]+$/, "");
+}
+
 export type CalendarSource = {
   id: string;
   name: string;
@@ -35,11 +57,14 @@ export type CalendarEvent = {
   source: string;
   color: string;
   location?: string;
+  /** Adres spotkania online, jeśli wydarzenie jakiś zawiera. */
+  meetingUrl?: string;
   /** Blok założony w panelu; tylko takie da się edytować. */
   own?: boolean;
   taskId?: string;
   /** Odpowiedniki po stronie dostawców, gdy blok jest z nimi zsynchronizowany. */
-  remote?: { google?: string; microsoft?: string };
+  /** Identyfikatory po stronie kont, po jednym na każde połączone konto. */
+  remote?: Record<string, string | undefined>;
 };
 
 type Store = {
@@ -204,6 +229,12 @@ export function parseIcs(
             source: source.name,
             color: source.color,
             location: current.LOCATION?.replace(/\\,/g, ","),
+            meetingUrl: findMeetingUrl(
+              current["X-GOOGLE-CONFERENCE"],
+              current.LOCATION,
+              current.DESCRIPTION,
+              current.URL,
+            ),
           });
         }
       }
@@ -313,7 +344,40 @@ export async function listEvents(
     store.sources.filter((s) => s.enabled).map((s) => fetchSource(s, from, to)),
   );
   const own = store.blocks.filter((b) => b.start < to && b.end > from);
-  return [...remote.flat(), ...own].sort((a, b) => a.start - b.start);
+
+  // Wydarzenia z podłączonych kont; bez nich widok pokazywałby tylko część
+  // dnia, choć zajętość z nich jest już uwzględniana przy planowaniu.
+  let accounts: CalendarEvent[] = [];
+  try {
+    const { fetchRemote } = await import("./calendar-sync");
+    accounts = await fetchRemote(from, to);
+  } catch {
+    /* konta niepodłączone albo brak sieci */
+  }
+
+  // Blok wysłany na konto wraca stamtąd jako osobne wydarzenie; zostawiamy
+  // wersję własną, bo tylko ją da się przesunąć z panelu.
+  const mine = new Set(
+    own.flatMap((b) => Object.values(b.remote ?? {}).filter(Boolean)),
+  );
+  // Odbicia zajętości pomijamy: pokazują ten sam czas co wydarzenie źródłowe.
+  let mirrored = new Set<string>();
+  try {
+    const { mirroredRemoteIds } = await import("./calendar-mirror");
+    mirrored = await mirroredRemoteIds();
+  } catch {
+    /* brak pliku z odbiciami */
+  }
+
+  const external = accounts.filter((e) => {
+    const remoteId = (e as { remoteId?: string }).remoteId;
+    if (!remoteId) return true;
+    return !mine.has(remoteId) && !mirrored.has(remoteId);
+  });
+
+  return [...remote.flat(), ...external, ...own].sort(
+    (a, b) => a.start - b.start,
+  );
 }
 
 export async function addBlock(input: {
@@ -352,16 +416,19 @@ export async function syncBlock(id: string): Promise<void> {
     const block = store.blocks.find((b) => b.id === id);
     if (!block) return;
 
-    for (const provider of ["google", "microsoft"] as const) {
-      const remoteId = await pushBlock(provider, {
+    // Blok trafia do każdego połączonego konta, więc zajętość widać wszędzie.
+    const { listAccounts } = await import("./calendar-oauth");
+    for (const account of await listAccounts()) {
+      if (!account.connected) continue;
+      const remoteId = await pushBlock(account.id, {
         title: block.title,
         start: block.start,
         end: block.end,
         taskId: block.taskId,
-        remoteId: block.remote?.[provider],
+        remoteId: block.remote?.[account.id],
       });
       if (remoteId) {
-        block.remote = { ...block.remote, [provider]: remoteId };
+        block.remote = { ...block.remote, [account.id]: remoteId };
       }
     }
     await write(store);
@@ -392,9 +459,8 @@ export async function deleteBlock(id: string): Promise<void> {
   if (block?.remote) {
     try {
       const { deleteRemote } = await import("./calendar-sync");
-      for (const provider of ["google", "microsoft"] as const) {
-        const remoteId = block.remote[provider];
-        if (remoteId) await deleteRemote(provider, remoteId);
+      for (const [account, remoteId] of Object.entries(block.remote)) {
+        if (remoteId) await deleteRemote(account, remoteId);
       }
     } catch {
       /* konto odłączone; lokalnie i tak kasujemy */

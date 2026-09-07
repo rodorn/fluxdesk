@@ -109,8 +109,27 @@ async function runSchedule(): Promise<void> {
   }
 }
 
+/**
+ * Zajętość z subskrybowanych kalendarzy przenosimy na konta co kwadrans.
+ * Rzadziej niż reszta pętli, bo to ruch po sieci, a terminy nie zmieniają się
+ * z sekundy na sekundę.
+ */
+let lastMirror = 0
+
+async function mirrorTick(): Promise<void> {
+  if (Date.now() - lastMirror < 15 * 60_000) return
+  lastMirror = Date.now()
+  try {
+    const { mirrorBusy } = await import('./calendar-mirror')
+    await mirrorBusy({ days: 14 })
+  } catch {
+    /* brak połączonych kont albo chwilowy brak sieci */
+  }
+}
+
 async function tick(): Promise<void> {
   await runSchedule()
+  void mirrorTick()
 
   let terminals;
   try {

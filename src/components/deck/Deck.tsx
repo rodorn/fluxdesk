@@ -22,6 +22,7 @@ import { TasksPanel } from '@/components/deck/TasksPanel'
 import { ResumePicker } from '@/components/deck/SessionPickers'
 import { SessionRail, type RailEntry } from '@/components/deck/SessionRail'
 import { TerminalView } from '@/components/deck/TerminalView'
+import { useLang } from '@/lib/i18n'
 import { ExternalPanel } from '@/components/deck/ExternalPanel'
 import { Button } from '@/components/ui'
 import { fmtTokens, fmtUsd } from '@/lib/format'
@@ -403,10 +404,28 @@ export function Deck() {
       .catch(() => undefined)
   }, [])
 
+  const { lang, setLang, t } = useLang()
+
   const flash = useCallback((msg: string) => {
     setToast(msg)
     setTimeout(() => setToast(undefined), 2600)
   }, [])
+
+  // Powrót z logowania do kalendarza. Panel działa w oknie bez paska adresu,
+  // więc bez tego wynik zgody nie byłby nigdzie widoczny.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const result = params.get('calendar')
+    if (!result) return
+    const ok = result.startsWith('polaczono-')
+    flash(
+      ok
+        ? `Kalendarz ${result.endsWith('google') ? 'Google' : 'Microsoft'} połączony`
+        : `Logowanie do kalendarza nie przeszło: ${result}`
+    )
+    if (ok) setModal({ kind: 'calendar' })
+    window.history.replaceState({}, '', window.location.pathname)
+  }, [flash])
 
   const run = useCallback(
     async (id: string, body: Record<string, unknown>) => {
@@ -724,6 +743,7 @@ export function Deck() {
       { id: 'new', label: 'Nowa sesja', keys: 'Alt+N', run: () => setModal({ kind: 'new', cwd: active?.cwd }) },
       { id: 'resume', label: 'Wznów zapisaną sesję', keys: 'Alt+R', run: () => setModal({ kind: 'resume' }) },
       { id: 'term', label: 'Nowy terminal (pełny claude)', keys: 'Alt+T', run: () => newTerminal() },
+      { id: 'calendar', label: 'Kalendarz (Google i Outlook)', keys: 'Q', run: () => setModal({ kind: 'calendar' }) },
       { id: 'grid', label: 'Przełącz siatkę sesji', keys: 'Alt+G', run: () => setGrid((v) => !v) },
       { id: 'memory', label: 'Pamięć', keys: 'Alt+M', run: () => setModal({ kind: 'memory' }) },
       { id: 'help', label: 'Skróty klawiszowe', keys: '?', run: () => setModal({ kind: 'help' }) },
@@ -911,7 +931,7 @@ export function Deck() {
               ) : null}
             </div>
           ) : null}
-          <Button onClick={() => setGrid((v) => !v)}>{grid ? 'Konsola' : 'Siatka'}</Button>
+          <Button onClick={() => setGrid((v) => !v)}>{grid ? t('Konsola') : t('Siatka')}</Button>
           <Button
             onClick={() => {
               if (splitId) return setSplitId(undefined)
@@ -920,19 +940,28 @@ export function Deck() {
             }}
             title="Dwie sesje obok siebie (O)"
           >
-            {splitId ? 'Jedna' : 'Dwie'}
+            {splitId ? t('Jedna') : t('Dwie')}
           </Button>
           <Button onClick={() => newTerminal()} title="Prawdziwy terminal (Alt+T)">
-            + Terminal
+            {t('+ Terminal')}
           </Button>
           <Button onClick={() => setModal({ kind: 'board' })} title="Tablica zadań (B)">
-            Zadania
+            {t('Zadania')}
           </Button>
-          <Button onClick={() => setModal({ kind: 'resume' })}>Wznów</Button>
+          <Button onClick={() => setModal({ kind: 'calendar' })} title="Kalendarz (Q)">
+            {t('Kalendarz')}
+          </Button>
+          <Button onClick={() => setModal({ kind: 'resume' })}>{t('Wznów')}</Button>
           <Button variant="primary" onClick={() => setModal({ kind: 'new', cwd: active?.cwd })}>
-            + Nowa
+            {t('+ Nowa')}
           </Button>
-          <Button onClick={() => setModal({ kind: 'help' })} title="Skróty">
+          <Button
+            onClick={() => setLang(lang === 'pl' ? 'en' : 'pl')}
+            title={lang === 'pl' ? 'Switch to English' : 'Przełącz na polski'}
+          >
+            {lang === 'pl' ? 'EN' : 'PL'}
+          </Button>
+          <Button onClick={() => setModal({ kind: 'help' })} title={t('Skróty')}>
             ?
           </Button>
         </div>
@@ -1274,7 +1303,7 @@ export function Deck() {
       {modal.kind === 'calendar' ? (
         <Overlay
           title="Kalendarz"
-          hint="przeciągnij zadanie na godzinę · Esc zamyka"
+          hint="przeciągnij zadanie na godzinę · Google i Outlook w obie strony · Esc zamyka"
           onClose={() => setModal({ kind: 'none' })}
           wide
         >

@@ -408,7 +408,7 @@ export const TEMPLATES: Record<string, { title: string; steps: string[]; tags: s
       'Sprawdzić pozycjonowanie i linkowanie',
       'Opublikować i sprawdzić na stronie',
     ],
-    tags: ['carmore', 'blog'],
+    tags: ['klient', 'blog'],
   },
   wdrozenie: {
     title: 'Wdrożenie u klienta',
@@ -424,7 +424,7 @@ export const TEMPLATES: Record<string, { title: string; steps: string[]; tags: s
   raport: {
     title: 'Raport miesięczny',
     steps: ['Zebrać dane', 'Sprawdzić anomalie', 'Opisać wnioski', 'Wysłać'],
-    tags: ['carmore', 'raporty'],
+    tags: ['klient', 'raporty'],
   },
 }
 

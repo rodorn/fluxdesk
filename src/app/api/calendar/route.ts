@@ -1,5 +1,13 @@
 import { handle } from '@/lib/api'
-import { connectionStatus, saveConfig, type Provider } from '@/lib/calendar-oauth'
+import { mirrorBusy } from '@/lib/calendar-mirror'
+import { findSlots, propose } from '@/lib/quickadd'
+import {
+  connectionStatus,
+  disconnect,
+  listAccounts,
+  saveConfig,
+  type Provider,
+} from '@/lib/calendar-oauth'
 import {
   addBlock,
   deleteBlock,
@@ -18,7 +26,11 @@ export async function GET(req: Request) {
   return handle(req, async () => {
     const params = new URL(req.url).searchParams
     if (params.get('view') === 'sources') {
-      return { sources: await listSources(), connections: await connectionStatus() }
+      return {
+        sources: await listSources(),
+        connections: await connectionStatus(),
+        accounts: await listAccounts(),
+      }
     }
 
     // Domyślnie tydzień od dziś; panel i tak zwykle pyta o konkretny zakres.
@@ -31,15 +43,28 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   return handle(req, async () => {
     const body = (await req.json()) as {
-      action: 'block' | 'move' | 'unblock' | 'source' | 'unsource' | 'config'
+      action:
+        | 'block'
+        | 'move'
+        | 'unblock'
+        | 'source'
+        | 'unsource'
+        | 'config'
+        | 'disconnect'
+        | 'quick'
+        | 'slots'
+        | 'mirror'
       id?: string
       title?: string
       start?: number
       end?: number
       taskId?: string
       source?: { id?: string; name?: string; url?: string; color?: string; enabled?: boolean }
-      provider?: Provider
+      provider?: string
+      minutes?: number
+      days?: number
       config?: { clientId: string; clientSecret: string; tenant?: string }
+      text?: string
     }
 
     switch (body.action) {
@@ -67,6 +92,22 @@ export async function POST(req: Request) {
         }
         await saveConfig(body.provider, body.config)
         return { ok: true, next: `/api/calendar/oauth/${body.provider}` }
+      }
+      case 'quick': {
+        if (!body.text?.trim()) throw new Error('Napisz, co i kiedy zaplanować')
+        return propose(body.text.trim())
+      }
+      case 'mirror': {
+        return mirrorBusy({ days: body.days })
+      }
+      case 'slots': {
+        const minutes = body.minutes && body.minutes > 0 ? body.minutes : 60
+        return { slots: await findSlots(minutes) }
+      }
+      case 'disconnect': {
+        if (!body.provider) throw new Error('Podaj dostawcę')
+        await disconnect(body.provider)
+        return { ok: true, connections: await connectionStatus() }
       }
       case 'unsource':
         if (!body.id) throw new Error('Podaj źródło')

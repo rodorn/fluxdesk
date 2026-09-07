@@ -27,9 +27,10 @@ export function TerminalView({
     let disposed = false;
     let cleanup: (() => void) | undefined;
     (async () => {
-      const [{ Terminal }, { FitAddon }] = await Promise.all([
+      const [{ Terminal }, { FitAddon }, { WebLinksAddon }] = await Promise.all([
         import("@xterm/xterm"),
         import("@xterm/addon-fit"),
+        import("@xterm/addon-web-links"),
       ]);
       if (disposed || !hostRef.current) return;
 
@@ -49,6 +50,17 @@ export function TerminalView({
       });
       const fit = new FitAddon();
       term.loadAddon(fit);
+      // Panel chodzi w oknie aplikacji, gdzie window.open bywa martwe,
+      // więc adres oddajemy systemowi i ląduje w zwykłej przeglądarce.
+      term.loadAddon(
+        new WebLinksAddon((_event, uri) => {
+          fetch("/api/open", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: uri }),
+          }).catch(() => window.open(uri, "_blank", "noopener"));
+        }),
+      );
       term.open(hostRef.current);
       fit.fit();
       setReady(true);
@@ -72,7 +84,15 @@ export function TerminalView({
       };
       const onData = term.onData((data) => {
         pending += data;
-        if (!flushTimer) flushTimer = setTimeout(flush, 12);
+        // Pierwszy znak leci od razu, kolejne dołączają do paczki: przy pisaniu
+        // liczy się reakcja na pierwsze naciśnięcie, nie liczba żądań.
+        if (!flushTimer) {
+          flush();
+          flushTimer = setTimeout(() => {
+            flushTimer = undefined;
+            flush();
+          }, 8);
+        }
       });
 
       // Wklejanie: tekst leci prosto do pty, a obraz zapisujemy i wysyłamy ścieżkę.

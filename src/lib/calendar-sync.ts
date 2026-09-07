@@ -1,5 +1,11 @@
-import { accessToken, type Provider } from "./calendar-oauth";
-import type { CalendarEvent } from "./calendar";
+import {
+  accessToken,
+  listAccounts,
+  splitAccount,
+  type AccountId,
+  type Provider,
+} from "./calendar-oauth";
+import { findMeetingUrl, type CalendarEvent } from "./calendar";
 
 /**
  * Dwukierunkowa wymiana z Google Calendar i Microsoft Graph. Odczyt daje
@@ -9,6 +15,8 @@ import type { CalendarEvent } from "./calendar";
 
 export type RemoteEvent = CalendarEvent & {
   provider: Provider;
+  /** Z którego konta pochodzi; przy kilku kontach naraz to jedyne rozróżnienie. */
+  account: AccountId;
   /** Identyfikator po stronie dostawcy; potrzebny do zmian i usunięcia. */
   remoteId: string;
 };
@@ -24,13 +32,14 @@ const LABEL: Record<Provider, string> = {
 };
 
 async function call(
-  provider: Provider,
+  account: AccountId,
   path: string,
   init?: RequestInit,
 ): Promise<Response | undefined> {
-  const token = await accessToken(provider);
+  const token = await accessToken(account);
   if (!token) return undefined;
 
+  const { provider } = splitAccount(account);
   const base =
     provider === "google"
       ? "https://www.googleapis.com/calendar/v3"
@@ -59,6 +68,9 @@ type GoogleEvent = {
   id: string;
   summary?: string;
   location?: string;
+  description?: string;
+  hangoutLink?: string;
+  conferenceData?: { entryPoints?: { entryPointType?: string; uri?: string }[] };
   start?: { dateTime?: string; date?: string };
   end?: { dateTime?: string; date?: string };
   extendedProperties?: { private?: Record<string, string> };
@@ -68,6 +80,9 @@ type GraphEvent = {
   id: string;
   subject?: string;
   location?: { displayName?: string };
+  onlineMeeting?: { joinUrl?: string };
+  onlineMeetingUrl?: string;
+  body?: { content?: string };
   isAllDay?: boolean;
   start?: { dateTime?: string; timeZone?: string };
   end?: { dateTime?: string; timeZone?: string };
@@ -87,48 +102,75 @@ function graphDate(value?: string, zone?: string): number | undefined {
 export async function fetchRemote(
   from: number,
   to: number,
+  only?: AccountId[],
 ): Promise<RemoteEvent[]> {
+  const accounts = (await listAccounts()).filter(
+    (a) => a.connected && (!only || only.includes(a.id)),
+  );
+  const perAccount = await Promise.all(
+    accounts.map((a) => fetchOne(a.id, from, to).catch(() => [])),
+  );
+  return perAccount.flat();
+}
+
+/** Pobranie z jednego konta; osobno, żeby awaria jednego nie psuła reszty. */
+async function fetchOne(
+  account: AccountId,
+  from: number,
+  to: number,
+): Promise<RemoteEvent[]> {
+  const { provider, label } = splitAccount(account);
   const out: RemoteEvent[] = [];
 
-  const google = await call(
-    "google",
-    `/calendars/primary/events?timeMin=${new Date(from).toISOString()}` +
-      `&timeMax=${new Date(to).toISOString()}&singleEvents=true&orderBy=startTime&maxResults=250`,
-  );
-  if (google?.ok) {
-    const data = (await google.json()) as { items?: GoogleEvent[] };
-    for (const e of data.items ?? []) {
-      const allDay = Boolean(e.start?.date);
-      const start = e.start?.dateTime
-        ? Date.parse(e.start.dateTime)
-        : e.start?.date
-          ? new Date(`${e.start.date}T00:00:00`).getTime()
-          : undefined;
-      const end = e.end?.dateTime
-        ? Date.parse(e.end.dateTime)
-        : e.end?.date
-          ? new Date(`${e.end.date}T00:00:00`).getTime()
-          : undefined;
-      if (!start || !end) continue;
+  if (provider === "google") {
+    const google = await call(
+      account,
+      `/calendars/primary/events?timeMin=${new Date(from).toISOString()}` +
+        `&timeMax=${new Date(to).toISOString()}&singleEvents=true&orderBy=startTime&maxResults=250`,
+    );
+    if (google?.ok) {
+      const data = (await google.json()) as { items?: GoogleEvent[] };
+      for (const e of data.items ?? []) {
+        const allDay = Boolean(e.start?.date);
+        const start = e.start?.dateTime
+          ? Date.parse(e.start.dateTime)
+          : e.start?.date
+            ? new Date(`${e.start.date}T00:00:00`).getTime()
+            : undefined;
+        const end = e.end?.dateTime
+          ? Date.parse(e.end.dateTime)
+          : e.end?.date
+            ? new Date(`${e.end.date}T00:00:00`).getTime()
+            : undefined;
+        if (!start || !end) continue;
 
-      out.push({
-        id: `google:${e.id}`,
-        remoteId: e.id,
-        provider: "google",
-        title: e.summary ?? "(bez nazwy)",
-        start,
-        end,
-        allDay,
-        source: LABEL.google,
-        color: COLORS.google,
-        location: e.location,
-        taskId: e.extendedProperties?.private?.fluxdeskTask,
-      });
+        out.push({
+          id: `${account}:${e.id}`,
+          remoteId: e.id,
+          provider,
+          account,
+          title: e.summary ?? "(bez nazwy)",
+          start,
+          end,
+          allDay,
+          source: label,
+          color: COLORS.google,
+          location: e.location,
+          // Google podaje adres spotkania osobnym polem; reszta w opisie.
+          meetingUrl:
+            e.hangoutLink ??
+            e.conferenceData?.entryPoints?.find((p) => p.entryPointType === "video")
+              ?.uri ??
+            findMeetingUrl(e.location, e.description),
+          taskId: e.extendedProperties?.private?.fluxdeskTask,
+        });
+      }
     }
+    return out;
   }
 
   const graph = await call(
-    "microsoft",
+    account,
     `/calendarView?startDateTime=${new Date(from).toISOString()}` +
       `&endDateTime=${new Date(to).toISOString()}&$top=250&$orderby=start/dateTime`,
     { headers: { Prefer: 'outlook.timezone="UTC"' } },
@@ -141,20 +183,24 @@ export async function fetchRemote(
       if (!start || !end) continue;
 
       out.push({
-        id: `microsoft:${e.id}`,
+        id: `${account}:${e.id}`,
         remoteId: e.id,
-        provider: "microsoft",
+        provider,
+        account,
         title: e.subject ?? "(bez nazwy)",
         start,
         end,
         allDay: Boolean(e.isAllDay),
-        source: LABEL.microsoft,
+        source: label,
         color: COLORS.microsoft,
         location: e.location?.displayName,
+        meetingUrl:
+          e.onlineMeeting?.joinUrl ??
+          e.onlineMeetingUrl ??
+          findMeetingUrl(e.location?.displayName, e.body?.content),
       });
     }
   }
-
   return out;
 }
 
@@ -167,7 +213,7 @@ export async function fetchRemote(
  * później rozpoznajemy to samo wydarzenie przy zmianie albo usunięciu.
  */
 export async function pushBlock(
-  provider: Provider,
+  account: AccountId,
   block: {
     title: string;
     start: number;
@@ -176,6 +222,7 @@ export async function pushBlock(
     remoteId?: string;
   },
 ): Promise<string | undefined> {
+  const { provider } = splitAccount(account);
   if (provider === "google") {
     const body = {
       summary: block.title,
@@ -187,11 +234,11 @@ export async function pushBlock(
       },
     };
     const res = block.remoteId
-      ? await call("google", `/calendars/primary/events/${block.remoteId}`, {
+      ? await call(account, `/calendars/primary/events/${block.remoteId}`, {
           method: "PATCH",
           body: JSON.stringify(body),
         })
-      : await call("google", "/calendars/primary/events", {
+      : await call(account, "/calendars/primary/events", {
           method: "POST",
           body: JSON.stringify(body),
         });
@@ -212,11 +259,11 @@ export async function pushBlock(
     categories: ["Fluxdesk"],
   };
   const res = block.remoteId
-    ? await call("microsoft", `/events/${block.remoteId}`, {
+    ? await call(account, `/events/${block.remoteId}`, {
         method: "PATCH",
         body: JSON.stringify(body),
       })
-    : await call("microsoft", "/events", {
+    : await call(account, "/events", {
         method: "POST",
         body: JSON.stringify(body),
       });
@@ -225,13 +272,14 @@ export async function pushBlock(
 }
 
 export async function deleteRemote(
-  provider: Provider,
+  account: AccountId,
   remoteId: string,
 ): Promise<boolean> {
+  const { provider } = splitAccount(account);
   const path =
     provider === "google"
       ? `/calendars/primary/events/${remoteId}`
       : `/events/${remoteId}`;
-  const res = await call(provider, path, { method: "DELETE" });
+  const res = await call(account, path, { method: "DELETE" });
   return Boolean(res && (res.ok || res.status === 404));
 }

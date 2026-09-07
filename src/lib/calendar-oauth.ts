@@ -1,4 +1,4 @@
-import { revealSecret, saveSecret } from "./secrets";
+import { deleteSecret, revealSecret, saveSecret } from "./secrets";
 
 /**
  * Logowanie do kalendarzy Google i Microsoftu. Dane aplikacji oraz tokeny żyją
@@ -29,19 +29,42 @@ const SCOPES: Record<Provider, string> = {
   microsoft: "offline_access Calendars.ReadWrite User.Read",
 };
 
-function secretName(provider: Provider, what: string): string {
-  return `${provider}/${what}`;
+/**
+ * Kont jednego dostawcy może być kilka: prywatne i firmowe. Każde ma własny
+ * identyfikator, a domyślne zostaje pod starą nazwą, żeby wcześniejsze
+ * połączenia nadal działały.
+ */
+export type AccountId = string;
+
+export function accountKey(provider: Provider, account?: AccountId): string {
+  return account && account !== provider ? `${provider}:${account}` : provider;
+}
+
+/** Rozkłada identyfikator konta z powrotem na dostawcę i etykietę. */
+export function splitAccount(id: AccountId): {
+  provider: Provider;
+  label: string;
+} {
+  const [provider, ...rest] = id.split(":");
+  return {
+    provider: provider === "microsoft" ? "microsoft" : "google",
+    label: rest.join(":") || (provider === "google" ? "Google" : "Outlook"),
+  };
+}
+
+function secretName(account: AccountId, what: string): string {
+  return `${account}/${what}`;
 }
 
 export async function readConfig(
-  provider: Provider,
+  account: AccountId,
 ): Promise<ProviderConfig | undefined> {
   try {
-    const clientId = await revealSecret(secretName(provider, "client_id"));
+    const clientId = await revealSecret(secretName(account, "client_id"));
     const clientSecret = await revealSecret(
-      secretName(provider, "client_secret"),
+      secretName(account, "client_secret"),
     );
-    const tenant = await revealSecret(secretName(provider, "tenant")).catch(
+    const tenant = await revealSecret(secretName(account, "tenant")).catch(
       () => "common",
     );
     return { clientId, clientSecret, tenant };
@@ -51,43 +74,43 @@ export async function readConfig(
 }
 
 export async function saveConfig(
-  provider: Provider,
+  account: AccountId,
   config: ProviderConfig,
 ): Promise<void> {
   await saveSecret({
-    name: secretName(provider, "client_id"),
+    name: secretName(account, "client_id"),
     value: config.clientId,
-    description: `Identyfikator aplikacji ${provider} dla kalendarza`,
+    description: `Identyfikator aplikacji ${account} dla kalendarza`,
   });
   await saveSecret({
-    name: secretName(provider, "client_secret"),
+    name: secretName(account, "client_secret"),
     value: config.clientSecret,
-    description: `Klucz tajny aplikacji ${provider}`,
+    description: `Klucz tajny aplikacji ${account}`,
   });
   if (config.tenant) {
     await saveSecret({
-      name: secretName(provider, "tenant"),
+      name: secretName(account, "tenant"),
       value: config.tenant,
       description: "Identyfikator katalogu Microsoft",
     });
   }
 }
 
-async function readTokens(provider: Provider): Promise<Tokens | undefined> {
+async function readTokens(account: AccountId): Promise<Tokens | undefined> {
   try {
     return JSON.parse(
-      await revealSecret(secretName(provider, "tokens")),
+      await revealSecret(secretName(account, "tokens")),
     ) as Tokens;
   } catch {
     return undefined;
   }
 }
 
-async function writeTokens(provider: Provider, tokens: Tokens): Promise<void> {
+async function writeTokens(account: AccountId, tokens: Tokens): Promise<void> {
   await saveSecret({
-    name: secretName(provider, "tokens"),
+    name: secretName(account, "tokens"),
     value: JSON.stringify(tokens),
-    description: `Tokeny dostępu do kalendarza ${provider}`,
+    description: `Tokeny dostępu do kalendarza ${account}`,
   });
 }
 
@@ -109,17 +132,20 @@ function tokenBase(provider: Provider, tenant?: string): string {
 
 /** Adres, na który wysyłamy użytkownika, żeby wyraził zgodę. */
 export async function authUrl(
-  provider: Provider,
+  account: AccountId,
   origin: string,
 ): Promise<string> {
-  const config = await readConfig(provider);
-  if (!config) throw new Error(`Brak danych aplikacji ${provider} w sejfie`);
+  const { provider } = splitAccount(account);
+  const config = await readConfig(account);
+  if (!config) throw new Error(`Brak danych aplikacji ${account} w sejfie`);
 
   const params = new URLSearchParams({
     client_id: config.clientId,
     redirect_uri: redirectUri(provider, origin),
     response_type: "code",
     scope: SCOPES[provider],
+    // Konto wraca do nas w state, bo adres powrotny jest wspólny dla dostawcy.
+    state: account,
     // Bez tego Google nie odda tokenu odświeżającego przy powtórnej zgodzie.
     ...(provider === "google"
       ? {
@@ -134,12 +160,13 @@ export async function authUrl(
 
 /** Zamienia kod z przekierowania na tokeny i zapisuje je w sejfie. */
 export async function exchangeCode(
-  provider: Provider,
+  account: AccountId,
   code: string,
   origin: string,
 ): Promise<Tokens> {
-  const config = await readConfig(provider);
-  if (!config) throw new Error(`Brak danych aplikacji ${provider} w sejfie`);
+  const { provider } = splitAccount(account);
+  const config = await readConfig(account);
+  if (!config) throw new Error(`Brak danych aplikacji ${account} w sejfie`);
 
   const res = await fetch(tokenBase(provider, config.tenant), {
     method: "POST",
@@ -172,7 +199,7 @@ export async function exchangeCode(
     refreshToken: data.refresh_token,
     expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000,
   };
-  await writeTokens(provider, tokens);
+  await writeTokens(account, tokens);
   return tokens;
 }
 
@@ -181,14 +208,15 @@ export async function exchangeCode(
  * w moment wygaśnięcia.
  */
 export async function accessToken(
-  provider: Provider,
+  account: AccountId,
 ): Promise<string | undefined> {
-  const tokens = await readTokens(provider);
+  const { provider } = splitAccount(account);
+  const tokens = await readTokens(account);
   if (!tokens) return undefined;
   if (tokens.expiresAt - 60_000 > Date.now()) return tokens.accessToken;
   if (!tokens.refreshToken) return undefined;
 
-  const config = await readConfig(provider);
+  const config = await readConfig(account);
   if (!config) return undefined;
 
   try {
@@ -217,25 +245,74 @@ export async function accessToken(
       refreshToken: data.refresh_token ?? tokens.refreshToken,
       expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000,
     };
-    await writeTokens(provider, fresh);
+    await writeTokens(account, fresh);
     return fresh.accessToken;
   } catch {
     return undefined;
   }
 }
 
+export type AccountStatus = {
+  id: AccountId;
+  provider: Provider;
+  label: string;
+  configured: boolean;
+  connected: boolean;
+};
+
+/** Lista kont poznana po sekretach w sejfie; zawsze pokazujemy oba domyślne. */
+export async function listAccounts(): Promise<AccountStatus[]> {
+  const ids = new Set<AccountId>(["google", "microsoft"]);
+  try {
+    const { listSecrets } = await import("./secrets");
+    for (const secret of await listSecrets()) {
+      const match = /^((?:google|microsoft)(?::[^/]+)?)\/client_id$/.exec(
+        secret.name,
+      );
+      if (match) ids.add(match[1]);
+    }
+  } catch {
+    /* sejf niedostępny: zostają domyślne */
+  }
+
+  const out: AccountStatus[] = [];
+  for (const id of ids) {
+    const { provider, label } = splitAccount(id);
+    out.push({
+      id,
+      provider,
+      label,
+      configured: Boolean(await readConfig(id)),
+      connected: Boolean(await accessToken(id)),
+    });
+  }
+  return out.sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/** Zgodność wstecz: stary kształt odpowiedzi dla dwóch domyślnych kont. */
 export async function connectionStatus(): Promise<
   Record<Provider, { configured: boolean; connected: boolean }>
 > {
-  const out = {} as Record<
-    Provider,
-    { configured: boolean; connected: boolean }
-  >;
-  for (const provider of ["google", "microsoft"] as Provider[]) {
-    out[provider] = {
-      configured: Boolean(await readConfig(provider)),
-      connected: Boolean(await accessToken(provider)),
-    };
+  const accounts = await listAccounts();
+  const pick = (p: Provider) => accounts.find((a) => a.id === p);
+  return {
+    google: {
+      configured: Boolean(pick("google")?.configured),
+      connected: Boolean(pick("google")?.connected),
+    },
+    microsoft: {
+      configured: Boolean(pick("microsoft")?.configured),
+      connected: Boolean(pick("microsoft")?.connected),
+    },
+  };
+}
+
+/**
+ * Usuwa dane aplikacji i tokeny jednego konta. Potrzebne, gdy konto trzeba
+ * przepiąć na inne albo panelu używa ktoś inny.
+ */
+export async function disconnect(account: AccountId): Promise<void> {
+  for (const what of ["tokens", "client_id", "client_secret", "tenant"]) {
+    await deleteSecret(secretName(account, what)).catch(() => undefined);
   }
-  return out;
 }

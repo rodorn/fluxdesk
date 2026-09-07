@@ -43,6 +43,22 @@ knows who it is talking to.
 of when the weekly limit runs out, real working time measured from five-minute
 activity windows, and a count of how often you switch between sessions.
 
+**Calendar.** Google and Microsoft in both directions, several accounts of the
+same provider side by side. Type a sentence like `dentist wednesday 4pm`: the
+parser handles the date, and when the length is missing a model estimates it
+through a tool call, so a dentist visit gets 45 minutes rather than a default
+hour. Everything stays editable before saving. Blocks written from the panel
+appear in every connected account, conflicts are detected across all calendars
+at once, and `find a free slot` returns windows free everywhere. Online meetings
+carry a join link pulled from Teams, Meet, Zoom, Whereby, Jitsi and Webex.
+Busy-time mirroring copies the hours of one calendar into another as a plain
+`Zajęte` block, without the title, so colleagues see the time is taken but not
+why; those mirrors are hidden from your own view.
+
+**Two languages.** The interface switches between Polish and English with the
+`EN` button in the header. The dictionary maps Polish text to English, so an
+untranslated string falls back to the original instead of an empty label.
+
 **Around the work.** GitLab merge requests and issues, failed user services,
 repositories with uncommitted changes, project cards, a daily journal that turns
 into a standup note, a public `/status` page, and phone notifications through

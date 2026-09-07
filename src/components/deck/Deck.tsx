@@ -14,6 +14,7 @@ import { JournalPanel } from '@/components/deck/JournalPanel'
 import { SearchPanel } from '@/components/deck/SearchPanel'
 import { GitlabPanel } from '@/components/deck/GitlabPanel'
 import { AttentionPanel } from '@/components/deck/AttentionPanel'
+import { CalendarPanel } from '@/components/deck/CalendarPanel'
 import { ProjectsPanel } from '@/components/deck/ProjectsPanel'
 import { PulsePanel } from '@/components/deck/PulsePanel'
 import { TaskBoard } from '@/components/deck/TaskBoard'
@@ -47,6 +48,7 @@ type Modal =
   | { kind: 'pulse' }
   | { kind: 'attention' }
   | { kind: 'projects' }
+  | { kind: 'calendar' }
   | { kind: 'journal' }
   | { kind: 'search' }
   | { kind: 'help' }
@@ -305,7 +307,7 @@ export function Deck() {
       fetch('/api/browser')
         .then((r) => (r.ok ? r.json() : undefined))
         .then((d) => d && setBrowser(d))
-        .catch(() => undefined)
+      .catch(() => undefined)
     check()
     const t = setInterval(check, 30_000)
     return () => clearInterval(t)
@@ -370,7 +372,7 @@ export function Deck() {
       fetch('/api/limits')
         .then((r) => (r.ok ? r.json() : undefined))
         .then((d) => d && setLimits(d))
-        .catch(() => undefined)
+      .catch(() => undefined)
     load()
     const t = setInterval(load, 120_000)
     return () => clearInterval(t)
@@ -382,7 +384,7 @@ export function Deck() {
       fetch('/api/journal')
         .then((r) => (r.ok ? r.json() : undefined))
         .then((d) => d && setToday(d.totals))
-        .catch(() => undefined)
+      .catch(() => undefined)
     load()
     const t = setInterval(load, 120_000)
     return () => clearInterval(t)
@@ -626,6 +628,7 @@ export function Deck() {
         KeyY: () => setModal({ kind: 'pulse' }),
         KeyC: () => setModal({ kind: 'attention' }),
         KeyE: () => setModal({ kind: 'projects' }),
+        KeyQ: () => setModal({ kind: 'calendar' }),
         KeyV: () => {
           // Pełny ekran jednej rozmowy: chowa listę, zakładki i kolumnę boczną.
           setFocus(true)
@@ -1265,6 +1268,17 @@ export function Deck() {
           wide
         >
           <TaskBoard />
+        </Overlay>
+      ) : null}
+
+      {modal.kind === 'calendar' ? (
+        <Overlay
+          title="Kalendarz"
+          hint="przeciągnij zadanie na godzinę · Esc zamyka"
+          onClose={() => setModal({ kind: 'none' })}
+          wide
+        >
+          <CalendarPanel />
         </Overlay>
       ) : null}
 

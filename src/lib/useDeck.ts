@@ -95,9 +95,15 @@ export function useDeck(): DeckApi {
   }, [])
 
   const reload = useCallback(async () => {
+    // Panel bywa restartowany w trakcie pracy; zerwane zapytanie nie może
+    // wywracać interfejsu, bo za chwilę i tak spróbujemy ponownie.
     const [live, term] = await Promise.all([
-      fetch('/api/live').then((r) => (r.ok ? r.json() : undefined)),
-      fetch('/api/term').then((r) => (r.ok ? r.json() : undefined)),
+      fetch('/api/live')
+        .then((r) => (r.ok ? r.json() : undefined))
+        .catch(() => undefined),
+      fetch('/api/term')
+        .then((r) => (r.ok ? r.json() : undefined))
+        .catch(() => undefined),
     ])
     if (live) setSessions(live.items as LiveSessionInfo[])
     if (term) {
@@ -118,7 +124,9 @@ export function useDeck(): DeckApi {
   }, [])
 
   const reloadExternal = useCallback(async () => {
-    const proc = await fetch('/api/processes').then((r) => (r.ok ? r.json() : undefined))
+    const proc = await fetch('/api/processes')
+      .then((r) => (r.ok ? r.json() : undefined))
+      .catch(() => undefined)
     if (proc) setExternal((proc.items as ExternalSession[]).filter((p) => !p.ownedByPanel))
   }, [])
 
@@ -142,6 +150,8 @@ export function useDeck(): DeckApi {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+      }).catch(() => {
+        throw new Error('Panel chwilowo nie odpowiada')
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Akcja nie powiodła się')
@@ -153,7 +163,7 @@ export function useDeck(): DeckApi {
 
   const close = useCallback(
     async (id: string) => {
-      await fetch(`/api/live/${id}`, { method: 'DELETE' })
+      await fetch(`/api/live/${id}`, { method: 'DELETE' }).catch(() => undefined)
       buffers.current.delete(id)
       backfilled.current.delete(id)
       await reload()
@@ -163,7 +173,7 @@ export function useDeck(): DeckApi {
 
   const closeTerminal = useCallback(
     async (id: string) => {
-      await fetch(`/api/term/${id}`, { method: 'DELETE' })
+      await fetch(`/api/term/${id}`, { method: 'DELETE' }).catch(() => undefined)
       await reload()
     },
     [reload]
@@ -171,7 +181,7 @@ export function useDeck(): DeckApi {
 
   const killExternal = useCallback(
     async (pid: number) => {
-      await fetch(`/api/processes?pid=${pid}`, { method: 'DELETE' })
+      await fetch(`/api/processes?pid=${pid}`, { method: 'DELETE' }).catch(() => undefined)
       await reloadExternal()
     },
     [reloadExternal]

@@ -43,6 +43,7 @@ const GROUPS: { title: string; rows: [string, string][] }[] = [
       ['Y', 'puls: usługi i zmiany w repo'],
       ['C', 'uwaga: cel dnia i czas pracy'],
       ['E', 'projekty i ich stan'],
+      ['Q', 'kalendarz i planowanie dnia'],
       ['V', 'pełny ekran jednej rozmowy'],
       ['D', 'dziennik dnia'],
       ['/', 'szukaj we wszystkich rozmowach'],

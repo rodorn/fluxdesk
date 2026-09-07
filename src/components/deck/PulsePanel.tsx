@@ -30,7 +30,7 @@ export function PulsePanel({
       fetch("/api/pulse")
         .then((r) => (r.ok ? r.json() : undefined))
         .then((d) => d && setData(d as Pulse))
-        .catch(() => undefined);
+      .catch(() => undefined);
     load();
     const t = setInterval(load, 120_000);
     return () => clearInterval(t);

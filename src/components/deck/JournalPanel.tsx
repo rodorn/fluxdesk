@@ -132,7 +132,7 @@ export function JournalPanel() {
               fetch("/api/journal?range=week")
                 .then((r) => (r.ok ? r.json() : undefined))
                 .then((d) => d && setWeek(d))
-                .catch(() => undefined);
+      .catch(() => undefined);
             }
           }}
         >

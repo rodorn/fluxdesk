@@ -36,7 +36,7 @@ export function GitlabPanel({
       fetch("/api/gitlab")
         .then((r) => (r.ok ? r.json() : undefined))
         .then((d) => d && setData(d as Data))
-        .catch(() => undefined);
+      .catch(() => undefined);
     load();
     const t = setInterval(load, 180_000);
     return () => clearInterval(t);

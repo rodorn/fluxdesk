@@ -1,0 +1,15 @@
+node_modules
+.next
+out
+.env
+.env.local
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+
+# katalog buildu usługi
+.next-service
+
+# prywatne notatki robocze
+docs/POMYSLY.md
+docs/PRZYPADKI.md

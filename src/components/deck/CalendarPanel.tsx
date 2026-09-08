@@ -403,53 +403,6 @@ export function CalendarPanel({
           </Button>
         </div>
 
-        {(["google", "microsoft"] as const).some(
-          (p) => !connections[p]?.connected,
-        ) ? (
-          <div
-            className="flex flex-wrap items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px]"
-            style={{
-              background: "var(--panel-2)",
-              border: "1px solid var(--border)",
-            }}
-          >
-            <span className="muted">Zapis do kalendarzy:</span>
-            {(["google", "microsoft"] as const).map((p) => (
-              <span key={p} className="flex items-center gap-1">
-                <span
-                  style={{
-                    color: connections[p]?.connected
-                      ? "var(--ok)"
-                      : "var(--warn)",
-                  }}
-                >
-                  {p === "google" ? "Google" : "Outlook"}{" "}
-                  {connections[p]?.connected ? "połączony" : "niepołączony"}
-                </span>
-                {!connections[p]?.connected ? (
-                  <Button
-                    variant="primary"
-                    onClick={() => {
-                      if (connections[p]?.configured) {
-                        window.location.href = `/api/calendar/oauth/${p}`;
-                        return;
-                      }
-                      setShowSources(true);
-                      setAppForm((f) => ({ ...f, provider: p }));
-                      setShowHow(true);
-                      openConsole(p);
-                    }}
-                  >
-                    {connections[p]?.configured
-                      ? "Połącz"
-                      : `Podłącz ${p === "google" ? "Google" : "Microsoft"}`}
-                  </Button>
-                ) : null}
-              </span>
-            ))}
-          </div>
-        ) : null}
-
         <form
           onSubmit={(e) => {
             e.preventDefault();

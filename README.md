@@ -10,8 +10,8 @@ the tab, and a small CLI client lets you drop back into any of them from a shell
 Built because 22 forgotten `claude` processes were sitting in separate terminals,
 eating 5.3 GB, with no way to tell which one needed an answer.
 
-> Interface language is Polish. Code comments are Polish as well; commit messages
-> and this document are English.
+> The interface speaks Polish and English; switch it under ⚙ (`Alt+,`). Code
+> comments are Polish; commit messages and this document are English.
 
 ## What it does
 
@@ -69,9 +69,10 @@ after the first slip. Every proposal explains itself (`3 days overdue`,
 vault, the profile and calendar accounts live behind the ⚙ button (`Alt+,`)
 instead of being scattered across panels.
 
-**Two languages.** The interface switches between Polish and English with the
-`EN` button in the header. The dictionary maps Polish text to English, so an
-untranslated string falls back to the original instead of an empty label.
+**Two languages.** The interface switches between Polish and English under ⚙
+(`Alt+,`). The dictionary maps Polish text to English, so an untranslated string
+falls back to the original instead of an empty label; adding a language means
+adding entries to one file, `src/lib/i18n.ts`.
 
 **Around the work.** GitLab merge requests and issues, failed user services,
 repositories with uncommitted changes, project cards, a daily journal that turns
@@ -96,6 +97,18 @@ cd fluxdesk
 The script installs dependencies, builds the native pty module, builds the app,
 registers a `systemd --user` service and links the `fluxdesk` CLI client. The
 panel then runs on <http://localhost:4317> and starts with your session.
+
+To get it in your application launcher as a normal desktop app:
+
+```bash
+install -Dm644 desktop/fluxdesk.desktop ~/.local/share/applications/fluxdesk.desktop
+install -Dm644 desktop/fluxdesk.svg ~/.local/share/icons/hicolor/scalable/apps/fluxdesk.svg
+install -Dm755 desktop/fluxdesk.sh ~/.local/bin/fluxdesk-app
+update-desktop-database ~/.local/share/applications
+```
+
+The launcher entry opens the panel in its own window, starting the service first
+if it happens to be down. Set `BROWSER` if you do not use Chrome.
 
 Manual alternative:
 

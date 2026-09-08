@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Fluxdesk
+GenericName=Claude Code session desk
+Comment=One window for every conversation, task and calendar
+Exec=fluxdesk-app
+Icon=fluxdesk
+Terminal=false
+Categories=Development;
+StartupWMClass=fluxdesk
+Keywords=claude;sessions;tasks;calendar;flux;

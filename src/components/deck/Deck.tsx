@@ -608,6 +608,14 @@ export function Deck() {
       const code = e.code
       const typing = inTextField()
 
+      // Przeładowanie panelu: okno aplikacji nie ma paska adresu, więc bez
+      // skrótu jedynym wyjściem po nieudanym wczytaniu byłoby zamknięcie okna.
+      if (code === 'F5' || (chord && code === 'KeyR')) {
+        e.preventDefault()
+        window.location.reload()
+        return
+      }
+
       // Esc przerywa turę, o ile nie masz nic wpisanego w polu.
       if (code === 'Escape' && active) {
         const el = document.activeElement as HTMLTextAreaElement | null
@@ -773,6 +781,7 @@ export function Deck() {
       { id: 'term', label: 'Nowy terminal (pełny claude)', keys: 'Alt+T', run: () => newTerminal() },
       { id: 'calendar', label: 'Kalendarz (Google i Outlook)', keys: 'Q', run: () => openCalendar() },
       { id: 'settings', label: 'Ustawienia', keys: 'Alt+,', run: () => setModal({ kind: 'settings' }) },
+      { id: 'reload', label: 'Przeładuj panel', keys: 'F5 / Ctrl+Alt+R', run: () => window.location.reload() },
       { id: 'grid', label: 'Przełącz siatkę sesji', keys: 'Alt+G', run: () => setGrid((v) => !v) },
       { id: 'memory', label: 'Pamięć', keys: 'Alt+M', run: () => setModal({ kind: 'memory' }) },
       { id: 'help', label: 'Skróty klawiszowe', keys: '?', run: () => setModal({ kind: 'help' }) },

@@ -51,6 +51,8 @@ const GROUPS: { title: string; rows: [string, string][] }[] = [
       ['O', 'dwie sesje obok siebie'],
       ['P', 'paleta poleceń'],
       ['M', 'pamięć, profil i sejf'],
+      ['Alt+,', 'ustawienia: język, powiadomienia, zgody, kalendarze'],
+      ['F5 lub Ctrl+Alt+R', 'przeładuj panel'],
       ['H lub ?', 'ta pomoc'],
     ],
   },

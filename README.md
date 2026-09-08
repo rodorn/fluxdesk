@@ -115,9 +115,14 @@ Manual alternative:
 ```bash
 npm install
 npm rebuild node-pty
-npm run build
-npm start
+NEXT_DIST_DIR=.next-service npm run build
+NEXT_DIST_DIR=.next-service npm start
 ```
+
+Run the production build, not `next dev`. Development mode compiles on every
+request, which costs 12–111 ms per keystroke in a terminal instead of 2 ms. The
+separate build directory means rebuilding from another session does not disturb
+the running panel.
 
 ## Configuration
 
@@ -163,7 +168,10 @@ anywhere. Press `?` for the full list.
 | `O`, `V`, `G`, `F` | Split, full screen, grid, focus mode          |
 | `Z`, `B`, `D`, `C` | Tasks, board, journal, attention              |
 | `M`, `L`, `Y`, `E` | Knowledge, GitLab, machine pulse, projects    |
+| `Q`                | Calendar and day planning                     |
 | `/`, `P`           | Search transcripts, command palette           |
+| `Alt+,`            | Settings: language, notifications, calendars  |
+| `F5`, `Ctrl+Alt+R` | Reload the panel                              |
 | `Esc`              | Interrupt the current turn                    |
 
 ## Security

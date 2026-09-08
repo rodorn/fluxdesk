@@ -18,7 +18,9 @@ echo "2/4 moduł pty"
 npm rebuild node-pty --silent 2>/dev/null || (cd node_modules/node-pty && npx node-gyp rebuild >/dev/null)
 
 echo "3/4 budowanie"
-npm run build >/dev/null
+# Do osobnego katalogu, żeby późniejsza przebudowa nie wywracała działającej
+# usługi w trakcie pracy.
+NEXT_DIST_DIR=.next-service npm run build >/dev/null
 
 echo "4/4 usługa systemd"
 mkdir -p "$HOME/.config/systemd/user"
@@ -31,9 +33,13 @@ After=network.target
 Type=simple
 WorkingDirectory=$DIR
 ExecStart=$(command -v npm) start
+# Gospodarze terminali są procesami potomnymi panelu. Bez tego systemd zabija
+# przy restarcie całą grupę i wszystkie sesje giną razem z nim.
+KillMode=process
 Restart=on-failure
 RestartSec=3
 Environment=NODE_ENV=production
+Environment=NEXT_DIST_DIR=.next-service
 Environment=PORT=$PORT
 Environment=PATH=$HOME/.local/bin:/usr/local/bin:/usr/bin
 UNIT

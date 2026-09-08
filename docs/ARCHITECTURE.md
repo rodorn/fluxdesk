@@ -69,6 +69,50 @@ alive (`testowanie`, `feedback`) and closed (`zrobione`). A timer stops on its
 own when a task leaves `in_progress`, and every transition records how long the
 task spent in the previous status.
 
+## Calendar
+
+Four layers, deliberately separate. `calendar.ts` owns local blocks and ICS
+subscriptions, including RRULE expansion. `calendar-oauth.ts` holds the account
+model: an account is `provider` or `provider:label`, so several Google or
+Microsoft accounts coexist, each with its own credentials and tokens in the
+vault. `calendar-sync.ts` talks to the provider APIs, one account at a time, so
+a single broken account does not blank the whole view. `calendar-mirror.ts`
+copies busy hours between calendars as plain `Zajęte` blocks and remembers the
+remote ids, which is also how those mirrors get hidden from your own view.
+
+Consent deliberately opens in a real browser and ends on a page of ours instead
+of redirecting back into the panel. The panel usually runs in an app window with
+no address bar, so a provider error page would trap it with no way out.
+
+## Understanding a sentence
+
+`quickparse.ts` turns `dentysta środa 16` into a block without asking a model:
+weekdays, `jutro`, dates, hour ranges, durations, parts of the day. Only when a
+duration is missing does `aiparse.ts` ask the model, and it asks for exactly one
+thing, how long this kind of errand takes, because dates computed in code are
+never wrong while a model once placed Wednesday a week too late. Answers land in
+`calendar-estimates.json`, so the second `dentysta` costs nothing and returns in
+milliseconds instead of seconds.
+
+Going straight to the API rather than through the CLI cut this from 12.5 s to
+1.5 s; the CLI start-up dominated everything else.
+
+## Planning tasks
+
+`autoplan.ts` places open tasks into free windows. The rules come from how plans
+fail: due dates order the queue, overdue work goes first rather than being
+dropped, tasks longer than 90 minutes are split, each day has a work ceiling so
+the calendar keeps room for the unplanned, and blocks keep a gap because a plan
+without slack dies at the first slip. Every block carries the reason it landed
+where it did, because a plan you cannot argue with is a plan you will not follow.
+
+## Interface language
+
+`i18n.ts` maps Polish strings to English rather than using invented keys. Code
+reads as sentences, and a missing translation falls back to the original instead
+of showing an empty label. The choice lives in `localStorage` and a window event
+switches every panel at once.
+
 ## Storage
 
 Everything the panel owns lives in `~/.claude-session-manager` as JSON, except

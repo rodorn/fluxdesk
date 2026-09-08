@@ -152,3 +152,34 @@ Whereby, Jitsi, Webex, Discord i huddle na Slacku.
 Od 13 maja 2025 Google Cloud wymaga weryfikacji dwuetapowej na koncie. Bez niej
 konsola odrzuca każdą podstronę i nie da się utworzyć klienta OAuth. Do czasu
 włączenia 2FA zostaje etap pierwszy, czyli odczyt przez prywatny adres ICS.
+
+## Widok na dłuższy okres
+
+Nad siatką są przyciski zakresu: dzień, trzy dni, tydzień i dwa tygodnie.
+Przy kilku dniach każda kolumna dostaje własny nagłówek z datą, dzisiejszy dzień
+jest wyróżniony, a strzałki przeskakują o cały widoczny okres, nie o jeden
+dzień. Na szerokim ekranie kalendarz zadokowany w kolumnie roboczej rozszerza
+się razem z zakresem, a przy tygodniu i dłużej lista zadań chowa się, żeby
+oddać miejsce siatce.
+
+## Automatyczne układanie zadań
+
+Przycisk **Ułóż plan** wstawia otwarte zadania w wolne okna. Reguły wzięte
+z tego, jak plany psują się w praktyce:
+
+- termin decyduje o kolejności, a zadanie po terminie idzie na początek,
+- zadanie dłuższe niż 90 minut dzielimy na części,
+- dzień ma limit czasu na zadania, reszta zostaje na spotkania i sprawy,
+  których nikt nie planuje,
+- między blokami zostaje przerwa,
+- zadania zablokowane i zlecone komuś innemu pomijamy.
+
+Każda propozycja mówi, skąd się wzięła (`3 dni po terminie`, `pilne`,
+`część z 180 min`). Plan jest propozycją: pojedyncze pozycje można usunąć,
+zanim zapiszesz całość.
+
+## Ustawienia kont
+
+Podłączanie Google i Microsoftu przeniosło się do **Ustawień** (⚙ w nagłówku
+albo `Alt+,`), sekcja **Kalendarze**. Kalendarz pokazuje już tylko stan
+połączenia, bo formularze wypełnia się raz, a na dzień patrzy się codziennie.

@@ -24,7 +24,7 @@ export type Proposal = {
 };
 
 /** Zajętość liczymy z bloków, subskrypcji ICS i obu podłączonych kont. */
-async function busyBetween(from: number, to: number): Promise<CalendarEvent[]> {
+export async function busyBetween(from: number, to: number): Promise<CalendarEvent[]> {
   const local = await listEvents(from, to).catch(() => [] as CalendarEvent[]);
   let remote: CalendarEvent[] = [];
   try {

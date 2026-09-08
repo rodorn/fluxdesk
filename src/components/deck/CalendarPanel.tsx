@@ -130,9 +130,16 @@ function forInput(at: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function CalendarPanel() {
+export function CalendarPanel({
+  onRangeChange,
+}: {
+  /** Panel nadrzędny poszerza kolumnę, gdy widać więcej niż jeden dzień. */
+  onRangeChange?: (days: number) => void;
+} = {}) {
   const { t } = useLang();
   const [day, setDay] = useState(() => startOfDay(Date.now()));
+  // Ile dni pokazujemy obok siebie: dzień, trzy dni albo cały tydzień roboczy.
+  const [range, setRange] = useState(1);
   const [events, setEvents] = useState<Event[]>([]);
   const [sources, setSources] = useState<Source[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -153,6 +160,9 @@ export function CalendarPanel() {
   });
   const [quick, setQuick] = useState("");
   const [mirror, setMirror] = useState<string>();
+  const [plan, setPlan] = useState<
+    { taskId: string; title: string; start: number; end: number; reason: string }[]
+  >();
   const [selected, setSelected] = useState<Event>();
   const [thinking, setThinking] = useState(false);
   const [proposal, setProposal] = useState<Proposal>();
@@ -169,7 +179,7 @@ export function CalendarPanel() {
 
   const load = useCallback(async () => {
     const from = day;
-    const to = day + 86_400_000;
+    const to = day + range * 86_400_000;
     const [cal, todo] = await Promise.all([
       fetch(`/api/calendar?from=${from}&to=${to}`).then((r) =>
         r.ok ? r.json() : undefined,
@@ -186,13 +196,17 @@ export function CalendarPanel() {
     if (conn?.connections) setConnections(conn.connections);
     if (conn?.accounts) setAccounts(conn.accounts as Account[]);
     if (todo) setTasks((todo.items as Task[]).slice(0, 20));
-  }, [day]);
+  }, [day, range]);
 
   useEffect(() => {
     load();
     const t = setInterval(load, 120_000);
     return () => clearInterval(t);
   }, [load]);
+
+  useEffect(() => {
+    onRangeChange?.(range);
+  }, [range, onRangeChange]);
 
   /**
    * Zgoda otwiera się w zwykłej przeglądarce, nie w oknie panelu: to okno nie
@@ -290,27 +304,80 @@ export function CalendarPanel() {
     return out;
   }, [day]);
 
+  /** Dni widoczne obok siebie; przy zakresie 1 to po prostu jeden dzień. */
+  const days = useMemo(
+    () => Array.from({ length: range }, (_, i) => day + i * 86_400_000),
+    [day, range],
+  );
+
   const timed = events.filter((e) => !e.allDay);
   const allDay = events.filter((e) => e.allDay);
   const isToday = startOfDay(Date.now()) === day;
 
   return (
-    <div className="grid gap-3 lg:grid-cols-[1fr_16rem]">
+    <div
+      className={`grid gap-3 ${range > 3 ? "" : "lg:grid-cols-[1fr_16rem]"}`}
+    >
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <Button onClick={() => setDay((d) => d - 86_400_000)}>‹</Button>
+          <Button onClick={() => setDay((d) => d - range * 86_400_000)}>‹</Button>
           <span className="text-sm font-medium">
-            {new Date(day).toLocaleDateString("pl-PL", {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-            })}
+            {range === 1
+              ? new Date(day).toLocaleDateString("pl-PL", {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                })
+              : `${new Date(day).toLocaleDateString("pl-PL", {
+                  day: "numeric",
+                  month: "short",
+                })} – ${new Date(
+                  day + (range - 1) * 86_400_000,
+                ).toLocaleDateString("pl-PL", {
+                  day: "numeric",
+                  month: "short",
+                })}`}
           </span>
-          <Button onClick={() => setDay((d) => d + 86_400_000)}>›</Button>
+          <Button onClick={() => setDay((d) => d + range * 86_400_000)}>›</Button>
           {!isToday ? (
-            <Button onClick={() => setDay(startOfDay(Date.now()))}>dziś</Button>
+            <Button onClick={() => setDay(startOfDay(Date.now()))}>
+              {t("dziś")}
+            </Button>
           ) : null}
+
+          <span className="flex gap-1">
+            {(
+              [
+                [1, t("dzień")],
+                [3, "3 " + t("dni")],
+                [7, t("tydzień")],
+                [14, "2 " + t("tygodnie")],
+              ] as [number, string][]
+            ).map(([n, label]) => (
+              <Button
+                key={n}
+                variant={range === n ? "primary" : undefined}
+                onClick={() => setRange(n)}
+              >
+                {label}
+              </Button>
+            ))}
+          </span>
           <span className="flex-1" />
+          <Button
+            onClick={async () => {
+              const res = await fetch("/api/calendar", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "plan", days: 7 }),
+              }).catch(() => undefined);
+              const d = await res?.json().catch(() => undefined);
+              setPlan(d?.blocks ?? []);
+            }}
+            title={t("Układa otwarte zadania w wolnych oknach")}
+          >
+            {t("Ułóż plan")}
+          </Button>
           <Button
             onClick={async () => {
               const res = await fetch("/api/calendar", {
@@ -404,6 +471,73 @@ export function CalendarPanel() {
             {thinking ? t("Liczę…") : t("Zaplanuj")}
           </Button>
         </form>
+
+        {plan ? (
+          <div
+            className="space-y-1.5 rounded-lg px-3 py-2"
+            style={{
+              background: "var(--panel-2)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold">
+                {plan.length
+                  ? `${t("Propozycja planu")}: ${plan.length}`
+                  : t("Nie ma czego zaplanować")}
+              </span>
+              <div className="flex gap-1.5">
+                {plan.length ? (
+                  <Button
+                    variant="primary"
+                    onClick={async () => {
+                      await send({ action: "apply-plan", blocks: plan });
+                      setPlan(undefined);
+                    }}
+                  >
+                    {t("Zapisz wszystkie")}
+                  </Button>
+                ) : null}
+                <Button onClick={() => setPlan(undefined)}>{t("Zamknij")}</Button>
+              </div>
+            </div>
+
+            <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
+              {plan.map((b) => (
+                <div
+                  key={`${b.taskId}-${b.start}`}
+                  className="flex items-center gap-2 rounded px-2 py-1 text-[11px]"
+                  style={{ background: "var(--bg)" }}
+                >
+                  <span className="w-28 shrink-0 mono muted">
+                    {new Date(b.start).toLocaleString("pl-PL", {
+                      weekday: "short",
+                      day: "numeric",
+                      month: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{b.title}</span>
+                  <span className="shrink-0 text-[10px] muted">{b.reason}</span>
+                  <button
+                    onClick={() =>
+                      setPlan((p) =>
+                        p?.filter(
+                          (x) => !(x.taskId === b.taskId && x.start === b.start),
+                        ),
+                      )
+                    }
+                    className="shrink-0 text-[10px] underline muted"
+                    title={t("Usuń z planu")}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {mirror ? (
           <p className="text-[11px] muted">{mirror}</p>
@@ -607,55 +741,93 @@ export function CalendarPanel() {
             </div>
           ))}
 
-          {withColumns(timed).map((e) => {
-            const top =
-              ((e.start - (day + START_HOUR * 3_600_000)) /
-                (SLOT_MIN * 60_000)) *
-              SLOT_PX;
-            const height = Math.max(
-              SLOT_PX - 2,
-              ((e.end - e.start) / (SLOT_MIN * 60_000)) * SLOT_PX - 2,
-            );
-            if (top < -SLOT_PX) return null;
-
-            // Pas na godziny ma 44 px; resztę dzielimy równo między kolumny.
+          {days.map((dayStart, dayIndex) => {
+            // Każdy dzień dostaje własny pas; godziny zostają wspólne po lewej.
             const gutter = 44;
-            const width = `calc((100% - ${gutter + 4}px) / ${e.columns})`;
-            const left = `calc(${gutter}px + ((100% - ${gutter + 4}px) / ${e.columns}) * ${e.column})`;
+            const dayWidth = `calc((100% - ${gutter + 4}px) / ${days.length})`;
+            const dayLeft = `calc(${gutter}px + ((100% - ${gutter + 4}px) / ${days.length}) * ${dayIndex})`;
+            const ofDay = timed.filter(
+              (e) => e.start < dayStart + 86_400_000 && e.end > dayStart,
+            );
 
             return (
-              <button
-                key={e.id}
-                onClick={() => setSelected(e)}
-                className="absolute overflow-hidden rounded px-1.5 py-0.5 text-left"
+              <div
+                key={dayStart}
+                className="absolute top-0 bottom-0"
                 style={{
-                  top: Math.max(0, top),
-                  height,
-                  left,
-                  width,
-                  background: e.own
-                    ? e.color
-                    : `color-mix(in srgb, ${e.color} 22%, transparent)`,
-                  borderLeft: `2px solid ${e.color}`,
-                  color: e.own ? "#fff" : "var(--text)",
-                  // Cieniutka ramka rozdziela sąsiadujące kolumny.
-                  outline:
-                    selected?.id === e.id
-                      ? "1px solid var(--accent)"
-                      : "1px solid var(--panel-2)",
+                  left: dayLeft,
+                  width: dayWidth,
+                  borderLeft:
+                    dayIndex > 0 ? "1px solid var(--border)" : undefined,
                 }}
-                title={`${e.title}\n${hhmm(e.start)} do ${hhmm(e.end)}\n${e.source}`}
               >
-                <div className="truncate text-[10px] font-medium">
-                  {e.meetingUrl ? "▸ " : ""}
-                  {e.title}
-                </div>
-                {height > SLOT_PX ? (
-                  <div className="truncate text-[9px] opacity-75">
-                    {hhmm(e.start)} · {e.source}
+                {days.length > 1 ? (
+                  <div
+                    className="absolute left-0 right-0 top-0 truncate px-1 text-[9px] font-semibold"
+                    style={{
+                      color:
+                        startOfDay(Date.now()) === dayStart
+                          ? "var(--accent)"
+                          : "var(--muted)",
+                    }}
+                  >
+                    {new Date(dayStart).toLocaleDateString("pl-PL", {
+                      weekday: "short",
+                      day: "numeric",
+                      month: "numeric",
+                    })}
                   </div>
                 ) : null}
-              </button>
+
+                {withColumns(ofDay).map((e) => {
+                  const top =
+                    ((e.start - (dayStart + START_HOUR * 3_600_000)) /
+                      (SLOT_MIN * 60_000)) *
+                    SLOT_PX;
+                  const height = Math.max(
+                    SLOT_PX - 2,
+                    ((e.end - e.start) / (SLOT_MIN * 60_000)) * SLOT_PX - 2,
+                  );
+                  if (top < -SLOT_PX) return null;
+
+                  const width = `calc(100% / ${e.columns})`;
+                  const left = `calc((100% / ${e.columns}) * ${e.column})`;
+
+                  return (
+                    <button
+                      key={e.id}
+                      onClick={() => setSelected(e)}
+                      className="absolute overflow-hidden rounded px-1.5 py-0.5 text-left"
+                      style={{
+                        top: Math.max(0, top),
+                        height,
+                        left,
+                        width,
+                        background: e.own
+                          ? e.color
+                          : `color-mix(in srgb, ${e.color} 22%, transparent)`,
+                        borderLeft: `2px solid ${e.color}`,
+                        color: e.own ? "#fff" : "var(--text)",
+                        outline:
+                          selected?.id === e.id
+                            ? "1px solid var(--accent)"
+                            : "1px solid var(--panel-2)",
+                      }}
+                      title={`${e.title}\n${hhmm(e.start)} do ${hhmm(e.end)}\n${e.source}`}
+                    >
+                      <div className="truncate text-[10px] font-medium">
+                        {e.meetingUrl ? "▸ " : ""}
+                        {e.title}
+                      </div>
+                      {height > SLOT_PX ? (
+                        <div className="truncate text-[9px] opacity-75">
+                          {hhmm(e.start)} · {e.source}
+                        </div>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
             );
           })}
         </div>
@@ -833,250 +1005,33 @@ export function CalendarPanel() {
             </form>
 
             <div
-              className="space-y-2 border-t pt-2"
+              className="space-y-1.5 border-t pt-2"
               style={{ borderColor: "var(--border)" }}
             >
               <p className="text-[11px] font-semibold">
-                Twoje konta, zapis w obie strony
+                {t("Twoje konta, zapis w obie strony")}
               </p>
-
-              {accounts.map((a) => (
-                <div
-                  key={a.id}
-                  className="flex flex-wrap items-center gap-1.5 rounded px-2 py-1.5 text-[11px]"
-                  style={{ background: "var(--panel-2)" }}
-                >
-                  <span className="w-28 shrink-0 truncate font-semibold">
-                    {a.label}
+              <p className="text-[10px] muted">
+                {t("Podłączasz je w Ustawieniach (⚙ w nagłówku, Alt+,)")}
+              </p>
+              {(["google", "microsoft"] as const).map((p) => (
+                <div key={p} className="flex items-center gap-2 text-[11px]">
+                  <span className="w-20 shrink-0">
+                    {p === "google" ? "Google" : "Outlook"}
                   </span>
                   <span
-                    className="flex-1"
                     style={{
-                      color: a.connected
+                      color: connections[p]?.connected
                         ? "var(--ok)"
-                        : a.configured
-                          ? "var(--warn)"
-                          : "var(--muted)",
+                        : "var(--muted)",
                     }}
                   >
-                    {a.connected
-                      ? "połączone, zapis działa"
-                      : a.configured
-                        ? "dane aplikacji są, brakuje zgody"
-                        : "brak danych aplikacji"}
+                    {connections[p]?.connected
+                      ? t("połączone, zapis działa")
+                      : t("brak danych aplikacji")}
                   </span>
-
-                  {a.configured ? (
-                    <Button
-                      variant={a.connected ? undefined : "primary"}
-                      onClick={() => connectAccount(a.id)}
-                    >
-                      {a.connected ? "Połącz ponownie" : "Połącz"}
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="primary"
-                      onClick={() => {
-                        setAppForm((f) => ({ ...f, provider: a.provider }));
-                        setShowHow(true);
-                        openConsole(a.provider);
-                      }}
-                    >
-                      {t("Skonfiguruj")}
-                    </Button>
-                  )}
-
-                  <Button onClick={() => openConsole(a.provider)}>
-                    {a.provider === "google" ? "Konsola Google" : "Portal Azure"}
-                  </Button>
-
-                  {a.configured ? (
-                    <Button
-                      onClick={() => send({ action: "disconnect", provider: a.id })}
-                      title="Usuwa tokeny i dane aplikacji z sejfu"
-                    >
-                      {t("Odłącz")}
-                    </Button>
-                  ) : null}
                 </div>
               ))}
-
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (!appForm.clientId.trim() || !appForm.clientSecret.trim())
-                    return;
-                  send({
-                    action: "config",
-                    // Etykieta rozróżnia konta tego samego dostawcy.
-                    provider: appForm.label.trim()
-                      ? `${appForm.provider}:${appForm.label.trim()}`
-                      : appForm.provider,
-                    config: {
-                      clientId: appForm.clientId.trim(),
-                      clientSecret: appForm.clientSecret.trim(),
-                      tenant: appForm.tenant.trim() || undefined,
-                    },
-                  });
-                  setAppForm({
-                    provider: appForm.provider,
-                    label: "",
-                    clientId: "",
-                    clientSecret: "",
-                    tenant: "",
-                  });
-                }}
-                className="flex flex-wrap gap-1.5"
-              >
-                <select
-                  value={appForm.provider}
-                  onChange={(e) =>
-                    setAppForm((f) => ({ ...f, provider: e.target.value }))
-                  }
-                  className="rounded px-1.5 py-1 text-[11px]"
-                  style={{
-                    background: "var(--bg)",
-                    border: "1px solid var(--border)",
-                  }}
-                >
-                  <option value="google">Google</option>
-                  <option value="microsoft">Microsoft</option>
-                </select>
-                <input
-                  value={appForm.label}
-                  onChange={(e) =>
-                    setAppForm((f) => ({ ...f, label: e.target.value }))
-                  }
-                  placeholder="nazwa konta, np. firmowe"
-                  className="w-36 rounded px-2 py-1 text-[11px] outline-none"
-                  style={{
-                    background: "var(--bg)",
-                    border: "1px solid var(--border)",
-                  }}
-                  title="Puste znaczy konto domyślne tego dostawcy"
-                />
-                <input
-                  value={appForm.clientId}
-                  onChange={(e) =>
-                    setAppForm((f) => ({ ...f, clientId: e.target.value }))
-                  }
-                  placeholder="identyfikator klienta"
-                  className="min-w-0 flex-1 rounded px-2 py-1 text-[11px] outline-none"
-                  style={{
-                    background: "var(--bg)",
-                    border: "1px solid var(--border)",
-                  }}
-                />
-                <input
-                  value={appForm.clientSecret}
-                  onChange={(e) =>
-                    setAppForm((f) => ({ ...f, clientSecret: e.target.value }))
-                  }
-                  type="password"
-                  placeholder="klucz tajny"
-                  className="min-w-0 flex-1 rounded px-2 py-1 text-[11px] outline-none"
-                  style={{
-                    background: "var(--bg)",
-                    border: "1px solid var(--border)",
-                  }}
-                />
-                {appForm.provider === "microsoft" ? (
-                  <input
-                    value={appForm.tenant}
-                    onChange={(e) =>
-                      setAppForm((f) => ({ ...f, tenant: e.target.value }))
-                    }
-                    placeholder="identyfikator katalogu (albo common)"
-                    className="w-52 rounded px-2 py-1 text-[11px] outline-none"
-                    style={{
-                      background: "var(--bg)",
-                      border: "1px solid var(--border)",
-                    }}
-                  />
-                ) : null}
-                <Button variant="primary" type="submit">
-                  {t("Zapisz w sejfie")}
-                </Button>
-              </form>
-
-              <div className="flex items-center gap-1.5 text-[10px]">
-                <span className="muted shrink-0">Adres powrotny:</span>
-                <span className="mono truncate flex-1">{redirect}</span>
-                <button
-                  onClick={() => {
-                    navigator.clipboard?.writeText(redirect).catch(() => undefined);
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 1500);
-                  }}
-                  className="shrink-0 underline"
-                  style={{ color: "var(--accent)" }}
-                >
-                  {copied ? "skopiowano" : "kopiuj"}
-                </button>
-              </div>
-
-              <button
-                onClick={() => setShowHow((v) => !v)}
-                className="text-[10px] underline muted"
-              >
-                {showHow ? "ukryj instrukcję" : "jak zdobyć te dane"}
-              </button>
-
-              {showHow ? (
-                <ol className="space-y-1 pl-4 text-[10px] muted list-decimal">
-                  {appForm.provider === "google" ? (
-                    <>
-                      <li>
-                        W konsoli Google Cloud załóż projekt i włącz Google
-                        Calendar API.
-                      </li>
-                      <li>
-                        Ekran zgody: typ zewnętrzny, dodaj siebie jako testera.
-                      </li>
-                      <li>
-                        Dane logowania: identyfikator klienta OAuth, typ
-                        aplikacja internetowa.
-                      </li>
-                      <li>
-                        Jako autoryzowany URI przekierowania wklej adres
-                        powrotny powyżej.
-                      </li>
-                      <li>
-                        Skopiuj identyfikator i klucz tajny do pól wyżej, zapisz
-                        i kliknij „połącz”.
-                      </li>
-                    </>
-                  ) : (
-                    <>
-                      <li>
-                        W Azure, Microsoft Entra ID, rejestracja aplikacji, nowa
-                        rejestracja.
-                      </li>
-                      <li>
-                        Typ przekierowania: sieć Web, adres jak powyżej.
-                      </li>
-                      <li>
-                        Uprawnienia API, Microsoft Graph, delegowane:
-                        Calendars.ReadWrite i offline_access.
-                      </li>
-                      <li>
-                        Certyfikaty i klucze tajne: nowy klucz tajny klienta,
-                        skopiuj wartość od razu.
-                      </li>
-                      <li>
-                        Identyfikator katalogu weź z przeglądu aplikacji, albo
-                        wpisz „common” dla kont prywatnych.
-                      </li>
-                    </>
-                  )}
-                </ol>
-              ) : null}
-
-              <p className="text-[10px] muted">
-                Dane trafiają do zaszyfrowanego sejfu panelu, każdy zestaw jest
-                osobny dla konta, na którym panel działa. Łącząc się z telefonu,
-                dopisz u dostawcy także adres powrotny z tego hosta.
-              </p>
             </div>
 
             <p className="text-[10px] muted">

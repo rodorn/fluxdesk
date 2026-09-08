@@ -7,6 +7,7 @@ import { Console, PERMISSION_MODES } from '@/components/deck/Console'
 import { GridView } from '@/components/deck/GridView'
 import { Help } from '@/components/deck/Help'
 import { MemoryPanel } from '@/components/deck/MemoryPanel'
+import { SettingsPanel } from '@/components/deck/SettingsPanel'
 import { NewSession } from '@/components/deck/NewSession'
 import { Palette, type Command } from '@/components/deck/Palette'
 import { Overlay } from '@/components/deck/Overlay'
@@ -53,6 +54,7 @@ type Modal =
   | { kind: 'journal' }
   | { kind: 'search' }
   | { kind: 'help' }
+  | { kind: 'settings' }
 
 /** Pasek zużycia limitu: im bliżej setki, tym ostrzejszy kolor. */
 function LimitBar({ label, pct, reset }: { label: string; pct: number; reset?: string }) {
@@ -406,6 +408,31 @@ export function Deck() {
 
   const { lang, setLang, t } = useLang()
 
+  // Na szerokim ekranie kalendarz mieszka w prawej kolumnie, zamiast zasłaniać
+  // rozmowę nakładką; na wąskim zostaje nakładka, bo nie ma go gdzie wstawić.
+  const [dock, setDock] = useState<'none' | 'calendar'>('none')
+  // Im dłuższy widoczny okres, tym szersza kolumna kalendarza.
+  const [calendarDays, setCalendarDays] = useState(1)
+  const wideRef = useRef(false)
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 1536px)')
+    const sync = () => {
+      wideRef.current = query.matches
+    }
+    sync()
+    query.addEventListener('change', sync)
+    return () => query.removeEventListener('change', sync)
+  }, [])
+
+  const openCalendar = useCallback(() => {
+    if (wideRef.current) {
+      setDock((d) => (d === 'calendar' ? 'none' : 'calendar'))
+      setModal({ kind: 'none' })
+    } else {
+      setModal({ kind: 'calendar' })
+    }
+  }, [])
+
   const flash = useCallback((msg: string) => {
     setToast(msg)
     setTimeout(() => setToast(undefined), 2600)
@@ -647,7 +674,8 @@ export function Deck() {
         KeyY: () => setModal({ kind: 'pulse' }),
         KeyC: () => setModal({ kind: 'attention' }),
         KeyE: () => setModal({ kind: 'projects' }),
-        KeyQ: () => setModal({ kind: 'calendar' }),
+        KeyQ: () => openCalendar(),
+        Comma: () => setModal({ kind: 'settings' }),
         KeyV: () => {
           // Pełny ekran jednej rozmowy: chowa listę, zakładki i kolumnę boczną.
           setFocus(true)
@@ -743,7 +771,8 @@ export function Deck() {
       { id: 'new', label: 'Nowa sesja', keys: 'Alt+N', run: () => setModal({ kind: 'new', cwd: active?.cwd }) },
       { id: 'resume', label: 'Wznów zapisaną sesję', keys: 'Alt+R', run: () => setModal({ kind: 'resume' }) },
       { id: 'term', label: 'Nowy terminal (pełny claude)', keys: 'Alt+T', run: () => newTerminal() },
-      { id: 'calendar', label: 'Kalendarz (Google i Outlook)', keys: 'Q', run: () => setModal({ kind: 'calendar' }) },
+      { id: 'calendar', label: 'Kalendarz (Google i Outlook)', keys: 'Q', run: () => openCalendar() },
+      { id: 'settings', label: 'Ustawienia', keys: 'Alt+,', run: () => setModal({ kind: 'settings' }) },
       { id: 'grid', label: 'Przełącz siatkę sesji', keys: 'Alt+G', run: () => setGrid((v) => !v) },
       { id: 'memory', label: 'Pamięć', keys: 'Alt+M', run: () => setModal({ kind: 'memory' }) },
       { id: 'help', label: 'Skróty klawiszowe', keys: '?', run: () => setModal({ kind: 'help' }) },
@@ -948,7 +977,7 @@ export function Deck() {
           <Button onClick={() => setModal({ kind: 'board' })} title="Tablica zadań (B)">
             {t('Zadania')}
           </Button>
-          <Button onClick={() => setModal({ kind: 'calendar' })} title="Kalendarz (Q)">
+          <Button onClick={openCalendar} title={`${t('Kalendarz')} (Q)`}>
             {t('Kalendarz')}
           </Button>
           <Button onClick={() => setModal({ kind: 'resume' })}>{t('Wznów')}</Button>
@@ -956,10 +985,10 @@ export function Deck() {
             {t('+ Nowa')}
           </Button>
           <Button
-            onClick={() => setLang(lang === 'pl' ? 'en' : 'pl')}
-            title={lang === 'pl' ? 'Switch to English' : 'Przełącz na polski'}
+            onClick={() => setModal({ kind: 'settings' })}
+            title={t('Ustawienia') + ' (Alt+,)'}
           >
-            {lang === 'pl' ? 'EN' : 'PL'}
+            ⚙
           </Button>
           <Button onClick={() => setModal({ kind: 'help' })} title={t('Skróty')}>
             ?
@@ -990,7 +1019,15 @@ export function Deck() {
 
       <div
         className={`grid min-h-0 flex-1 gap-3 ${
-          focus ? '' : 'lg:grid-cols-[15rem_1fr] 2xl:grid-cols-[17rem_1fr_21rem]'
+          focus
+            ? ''
+            : dock === 'calendar'
+              ? calendarDays >= 7
+                ? 'lg:grid-cols-[15rem_1fr] 2xl:grid-cols-[17rem_minmax(0,1fr)_minmax(0,2.4fr)]'
+                : calendarDays > 1
+                  ? 'lg:grid-cols-[15rem_1fr] 2xl:grid-cols-[17rem_minmax(0,1fr)_minmax(0,1.2fr)]'
+                  : 'lg:grid-cols-[15rem_1fr] 2xl:grid-cols-[17rem_1fr_34rem]'
+              : 'lg:grid-cols-[15rem_1fr] 2xl:grid-cols-[17rem_1fr_21rem]'
         }`}
       >
         <aside
@@ -1116,7 +1153,24 @@ export function Deck() {
         </main>
 
         {focus ? null : (
-          <aside className="hidden min-h-0 flex-col gap-3 2xl:flex">
+          <aside className="hidden min-h-0 flex-col gap-3 overflow-y-auto 2xl:flex">
+            {dock === 'calendar' ? (
+              <section className="panel px-3 py-2.5">
+                <div className="mb-2 flex items-center justify-between">
+                  <h2 className="text-[11px] font-semibold muted">
+                    {t('Kalendarz').toUpperCase()}
+                  </h2>
+                  <button
+                    onClick={() => setDock('none')}
+                    className="text-[10px] underline muted"
+                  >
+                    {t('Zamknij')}
+                  </button>
+                </div>
+                <CalendarPanel onRangeChange={setCalendarDays} />
+              </section>
+            ) : null}
+
             <section className="panel px-3 py-2.5">
               <h2 className="mb-2 text-[11px] font-semibold muted">ZADANIA</h2>
               <TasksPanel
@@ -1297,6 +1351,22 @@ export function Deck() {
           wide
         >
           <TaskBoard />
+        </Overlay>
+      ) : null}
+
+      {modal.kind === 'settings' ? (
+        <Overlay
+          title={t('Ustawienia')}
+          hint={t('język, powiadomienia, zgody, sejf · Esc zamyka')}
+          onClose={() => setModal({ kind: 'none' })}
+          wide
+        >
+          <SettingsPanel
+            onOpenCalendar={() => {
+              setModal({ kind: 'none' })
+              openCalendar()
+            }}
+          />
         </Overlay>
       ) : null}
 

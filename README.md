@@ -50,10 +50,24 @@ through a tool call, so a dentist visit gets 45 minutes rather than a default
 hour. Everything stays editable before saving. Blocks written from the panel
 appear in every connected account, conflicts are detected across all calendars
 at once, and `find a free slot` returns windows free everywhere. Online meetings
-carry a join link pulled from Teams, Meet, Zoom, Whereby, Jitsi and Webex.
+carry a join link pulled from Teams, Meet, Zoom, Whereby, Jitsi and Webex, and
+clicking it opens the desktop client rather than a browser tab. The day grid
+stretches to three days, a week or two weeks, and the docked column widens with
+it instead of covering the conversation.
 Busy-time mirroring copies the hours of one calendar into another as a plain
 `Zajęte` block, without the title, so colleagues see the time is taken but not
 why; those mirrors are hidden from your own view.
+
+**Smart scheduling.** `Plan tasks` places open tasks into free windows: due
+dates decide the order, overdue work goes first, long tasks are split into
+chunks of at most 90 minutes, each day has a work limit so the calendar does not
+fill to the brim, and blocks keep a gap because a plan without slack falls apart
+after the first slip. Every proposal explains itself (`3 days overdue`,
+`urgent`, `part of 180 min`) and you can drop single rows before saving.
+
+**One place for settings.** Language, notifications, tool permissions, the
+vault, the profile and calendar accounts live behind the ⚙ button (`Alt+,`)
+instead of being scattered across panels.
 
 **Two languages.** The interface switches between Polish and English with the
 `EN` button in the header. The dictionary maps Polish text to English, so an

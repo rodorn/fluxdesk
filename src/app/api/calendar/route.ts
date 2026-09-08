@@ -1,4 +1,5 @@
 import { handle } from '@/lib/api'
+import { planTasks } from '@/lib/autoplan'
 import { mirrorBusy } from '@/lib/calendar-mirror'
 import { findSlots, propose } from '@/lib/quickadd'
 import {
@@ -54,6 +55,8 @@ export async function POST(req: Request) {
         | 'quick'
         | 'slots'
         | 'mirror'
+        | 'plan'
+        | 'apply-plan'
       id?: string
       title?: string
       start?: number
@@ -63,6 +66,7 @@ export async function POST(req: Request) {
       provider?: string
       minutes?: number
       days?: number
+      blocks?: { taskId: string; title: string; start: number; end: number }[]
       config?: { clientId: string; clientSecret: string; tenant?: string }
       text?: string
     }
@@ -96,6 +100,25 @@ export async function POST(req: Request) {
       case 'quick': {
         if (!body.text?.trim()) throw new Error('Napisz, co i kiedy zaplanować')
         return propose(body.text.trim())
+      }
+      case 'plan': {
+        return { blocks: await planTasks({ days: body.days ?? 7 }) }
+      }
+      case 'apply-plan': {
+        // Zapisujemy dopiero to, co użytkownik zatwierdził, nie cały plan.
+        const blocks = body.blocks ?? []
+        const saved = []
+        for (const b of blocks) {
+          saved.push(
+            await addBlock({
+              title: b.title,
+              start: b.start,
+              end: b.end,
+              taskId: b.taskId,
+            })
+          )
+        }
+        return { saved: saved.length }
       }
       case 'mirror': {
         return mirrorBusy({ days: body.days })

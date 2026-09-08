@@ -97,6 +97,36 @@ const EN: Record<string, string> = {
   min: "min",
   "Wydarzenie z podłączonego kalendarza; zmienisz je tam, gdzie powstało.":
     "Event from a connected calendar; change it where it was created.",
+  /* ustawienia */
+  Ustawienia: "Settings",
+  dzień: "day",
+  dni: "days",
+  tydzień: "week",
+  tygodnie: "weeks",
+  "Ułóż plan": "Plan tasks",
+  "Propozycja planu": "Proposed plan",
+  "Nie ma czego zaplanować": "Nothing to plan",
+  "Zapisz wszystkie": "Save all",
+  "Usuń z planu": "Remove from plan",
+  "Układa otwarte zadania w wolnych oknach":
+    "Places open tasks into free windows",
+  "Otwórz kalendarz": "Open calendar",
+  "Podłączasz je w Ustawieniach (⚙ w nagłówku, Alt+,)":
+    "Connect them in Settings (⚙ in the header, Alt+,)",
+  Ogólne: "General",
+  Powiadomienia: "Notifications",
+  Zgody: "Permissions",
+  "O mnie": "About me",
+  "Język interfejsu": "Interface language",
+  Kalendarze: "Calendars",
+  "Konta Google i Outlook": "Google and Outlook accounts",
+  "Podłączenie kont, zasłona zajętości i źródła ICS":
+    "Connecting accounts, busy-time mirroring and ICS sources",
+  "O programie": "About",
+  "Wybór zostaje w tej przeglądarce. Napisy bez tłumaczenia zostają po polsku.":
+    "The choice stays in this browser. Untranslated labels stay in Polish.",
+  "język, powiadomienia, zgody, sejf · Esc zamyka":
+    "language, notifications, permissions, vault · Esc closes",
 };
 
 /** Tłumaczy napis; bez wpisu w słowniku zostaje polski oryginał. */
